@@ -5,8 +5,7 @@ import {
   marcarComoFallidoPermanente  
 } from '../db/database';
 
-// ⚠️ Actualiza esta IP si tu PC cambia de red
-const BACKEND_URL = 'http://192.168.1.6:5001/vitalsync-mvp/us-central1/registrarSignosVitales';
+const BACKEND_URL = 'https://us-central1-vitalsync-mvp.cloudfunctions.net/registrarSignosVitales';
 
 let sincronizandoEnEsteMomento = false;
 

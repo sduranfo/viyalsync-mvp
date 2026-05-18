@@ -1,0 +1,15 @@
+# Ignorar carpetas que no son parte de la app
+.agents/
+.claude/
+**/.agents/
+**/.claude/
+
+# Carpetas grandes innecesarias
+node_modules/.cache/
+.expo/
+ios/
+.git/
+
+# Logs
+*.log
+firebase-debug.log

@@ -12,10 +12,13 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.vitalsync.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -27,6 +30,11 @@
     },
     "plugins": [
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6affe6ff-dd8d-49a1-8f5f-2e08a5191682"
+      }
+    }
   }
 }

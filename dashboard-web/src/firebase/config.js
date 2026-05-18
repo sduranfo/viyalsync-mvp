@@ -1,31 +1,28 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Configuración de Firebase
-// NOTA: para emulador local estos valores no se validan, son placeholders
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "demo-api-key",
+  apiKey: "AIzaSyCcAmk8Ljg4C8YnlBIIl6Vo4boScPh9GDs",
   authDomain: "vitalsync-mvp.firebaseapp.com",
   projectId: "vitalsync-mvp",
-  storageBucket: "vitalsync-mvp.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:0000000000000000000000"
+  storageBucket: "vitalsync-mvp.firebasestorage.app",
+  messagingSenderId: "618129362949",
+  appId: "1:618129362949:web:51aa1cae05f1ebcfaccc6c"
 };
 
-// Inicializar Firebase
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
-// Obtener referencia a Firestore
 export const db = getFirestore(app);
 
-// Conectar al emulador local de Firestore
-// El emulador escucha en el puerto 8080 por defecto
-const USAR_EMULADOR = true; // cambiar a false cuando hagamos deploy en el Día 13
+const USAR_EMULADOR = false;
 
 if (USAR_EMULADOR) {
   try {
     connectFirestoreEmulator(db, 'localhost', 8080);
-    console.log('✓ Conectado al emulador de Firestore en localhost:8080');
+    console.log('✓ Conectado al emulador local');
   } catch (error) {
     console.warn('⚠ No se pudo conectar al emulador:', error.message);
   }

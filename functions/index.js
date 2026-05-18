@@ -17,6 +17,7 @@ const twilio = require("twilio");
 const twilioAccountSid = defineSecret("TWILIO_ACCOUNT_SID");
 const twilioAuthToken = defineSecret("TWILIO_AUTH_TOKEN");
 const twilioPhoneNumber = defineSecret("TWILIO_PHONE_NUMBER");
+const cirujanoPhoneNumber = defineSecret("CIRUJANO_PHONE_NUMBER");
 
 // Inicializar Firebase Admin (esto se hace UNA sola vez)
 initializeApp();
@@ -86,7 +87,11 @@ const fetchConReintentos = async (url, opciones, maxIntentos = 3) => {
 // Recibe datos del paramédico, separa PII, evita duplicados
 // ============================================================
 exports.registrarSignosVitales = onRequest(
-  { cors: true, region: "us-central1" },
+  { 
+    cors: true, 
+    region: "us-central1",
+    secrets: [cirujanoPhoneNumber]
+  },
   async (req, res) => {
     
     // Solo aceptamos peticiones POST
