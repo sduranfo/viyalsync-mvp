@@ -1,0 +1,268 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.dashboard {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+/* === HEADER === */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1e293b;
+  padding: 20px 30px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  border: 1px solid #334155;
+}
+
+.header h1 {
+  font-size: 28px;
+  color: #f1f5f9;
+}
+
+.subtitulo {
+  font-size: 14px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.header-right {
+  text-align: right;
+}
+
+.estado {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.conectado {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid #22c55e;
+}
+
+.desconectado {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid #ef4444;
+}
+
+.ultima-actualizacion {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* === ESTADÍSTICAS === */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  border-left: 4px solid;
+}
+
+.stat-rojo { border-color: #dc2626; }
+.stat-amarillo { border-color: #facc15; }
+.stat-verde { border-color: #22c55e; }
+.stat-total { border-color: #3b82f6; }
+
+.stat-numero {
+  font-size: 36px;
+  font-weight: bold;
+  color: #f1f5f9;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* === CONTENIDO === */
+.contenido h2 {
+  font-size: 20px;
+  color: #f1f5f9;
+  margin-bottom: 16px;
+}
+
+.vacio {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 60px 20px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.vacio p:first-child {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.vacio-subtitulo {
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* === TARJETAS DE PACIENTE === */
+.grid-pacientes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.tarjeta {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 16px;
+  border-left: 6px solid;
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: aparecer 0.5s ease;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tarjeta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.triage-rojo {
+  border-color: #dc2626;
+  animation: pulse-rojo 2s infinite, aparecer 0.5s ease;
+}
+
+@keyframes pulse-rojo {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+}
+
+.triage-amarillo {
+  border-color: #facc15;
+}
+
+.triage-verde {
+  border-color: #22c55e;
+}
+
+.triage-gris {
+  border-color: #64748b;
+}
+
+.tarjeta-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.triage-badge {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+.triage-rojo .triage-badge {
+  background: #dc2626;
+  color: white;
+}
+
+.triage-amarillo .triage-badge {
+  background: #facc15;
+  color: #422006;
+}
+
+.triage-verde .triage-badge {
+  background: #22c55e;
+  color: white;
+}
+
+.triage-gris .triage-badge {
+  background: #64748b;
+  color: white;
+}
+
+.hora-llegada {
+  font-size: 14px;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.tarjeta-body {
+  margin-top: 8px;
+}
+
+.paciente-id {
+  font-size: 12px;
+  color: #64748b;
+  font-family: monospace;
+  margin-bottom: 12px;
+}
+
+.signos-vitales {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.signo {
+  background: #0f172a;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.signo-label {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.signo-valor {
+  font-size: 16px;
+  font-weight: bold;
+  color: #f1f5f9;
+}
+
+.ambulancia-info {
+  font-size: 14px;
+  color: #94a3b8;
+  padding-top: 8px;
+  border-top: 1px solid #334155;
+}

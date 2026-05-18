@@ -3,10 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
   
-    // Pacientes: lectura permitida a usuarios autenticados, escritura solo desde Cloud Functions
+    // Pacientes (datos médicos anonimizados) - lectura abierta para el dashboard
     match /pacientes/{pacienteId} {
-      allow read: if request.auth != null;
-      allow write: if false;  // Solo Cloud Functions pueden escribir
+      allow read: if true;
+      allow write: if false; // solo el backend puede escribir
     }
     
     // PII: SOLO Cloud Functions pueden leer y escribir. Nadie más.
