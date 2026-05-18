@@ -36,6 +36,7 @@ export default function App() {
   // Estados del sistema
   const [online, setOnline] = useState(true);
   const [pendientes, setPendientes] = useState(0);
+  const [enviando, setEnviando] = useState(false);
 
   // Inicialización al arrancar la app
   useEffect(() => {
@@ -65,13 +66,67 @@ export default function App() {
     const total = contarPendientes();
     setPendientes(total);
   };
+  // Valida los datos ANTES de guardar local
+  // Devuelve null si todo está bien, o un mensaje de error si algo está mal
+  const validarDatos = () => {
+    if (!nombreCompleto || nombreCompleto.trim().length < 2) {
+      return 'El nombre del paciente debe tener al menos 2 caracteres';
+    }
+    
+    if (!documento || documento.trim().length < 5) {
+      return 'El documento debe tener al menos 5 caracteres';
+    }
+    
+    if (!triage) {
+      return 'Debes seleccionar un nivel de Triage';
+    }
+    
+    if (!frecuenciaCardiaca) {
+      return 'La frecuencia cardíaca es obligatoria';
+    }
+    
+    const fc = parseInt(frecuenciaCardiaca);
+    if (isNaN(fc) || fc < 20 || fc > 250) {
+      return 'Frecuencia cardíaca fuera de rango (20-250 bpm)';
+    }
+    
+    // Las presiones son opcionales en este MVP, pero si están, deben ser válidas
+    if (presionSistolica) {
+      const sistolica = parseInt(presionSistolica);
+      if (isNaN(sistolica) || sistolica < 40 || sistolica > 300) {
+        return 'Presión sistólica fuera de rango (40-300 mmHg)';
+      }
+    }
+    
+    if (presionDiastolica) {
+      const diastolica = parseInt(presionDiastolica);
+      if (isNaN(diastolica) || diastolica < 20 || diastolica > 200) {
+        return 'Presión diastólica fuera de rango (20-200 mmHg)';
+      }
+    }
+    
+    // Si ambas están definidas, validar relación lógica
+    if (presionSistolica && presionDiastolica) {
+      const sistolica = parseInt(presionSistolica);
+      const diastolica = parseInt(presionDiastolica);
+      if (sistolica <= diastolica) {
+        return 'La presión sistólica debe ser mayor que la diastólica';
+      }
+    }
+    
+    return null; // todo OK
+  };
 
-  // Botón ENVIAR: ahora guarda LOCAL primero
   const enviarPaciente = async () => {
-    if (!nombreCompleto || !documento || !triage || !frecuenciaCardiaca) {
-      Alert.alert('Campos faltantes', 'Completa todos los campos obligatorios');
+    // PASO 1: Validar ANTES de guardar 
+    const errorValidacion = validarDatos();
+    if (errorValidacion) {
+      Alert.alert('Datos inválidos', errorValidacion);
       return;
     }
+
+    // PASO 2: Activar estado "enviando" 
+    setEnviando(true);
 
     try {
       const requestId = uuidv4();
@@ -91,9 +146,10 @@ export default function App() {
         paramedicoId: PARAMEDICO_ID
       };
 
-      // 1. Guardar local INMEDIATAMENTE (siempre funciona)
+      // PASO 3: Guardar local INMEDIATAMENTE (siempre funciona)
       guardarPacienteLocal(requestId, payload);
       
+      // PASO 4: Confirmación al usuario
       Alert.alert(
         '✓ Paciente Guardado',
         online 
@@ -101,7 +157,7 @@ export default function App() {
           : 'Sin internet. Se enviará cuando vuelva la conexión.'
       );
       
-      // 2. Limpiar formulario (la sync corre en background)
+      // PASO 5: Limpiar formulario
       setNombreCompleto('');
       setDocumento('');
       setTriage(null);
@@ -109,16 +165,19 @@ export default function App() {
       setPresionSistolica('');
       setPresionDiastolica('');
       
-      // 3. Disparar sync (no esperamos a que termine)
+      // PASO 6: Disparar sync en background
       sincronizarPendientes().then(() => {
         actualizarContadorPendientes();
       });
       
-      // 4. Actualizar contador inmediatamente
+      // PASO 7: Actualizar contador inmediatamente
       actualizarContadorPendientes();
       
     } catch (error) {
       Alert.alert('Error', 'No se pudo guardar el paciente: ' + error.message);
+    } finally {
+      // PASO 8: SIEMPRE desactivar el estado de "enviando", aunque haya error
+      setEnviando(false);
     }
   };
 
@@ -206,8 +265,15 @@ export default function App() {
           keyboardType="numeric"
         />
 
-        <TouchableOpacity style={styles.botonEnviar} onPress={enviarPaciente}>
-          <Text style={styles.botonEnviarText}>GUARDAR PACIENTE</Text>
+        <TouchableOpacity 
+          style={[styles.botonEnviar, enviando && styles.botonEnviarDesactivado]} 
+          onPress={enviarPaciente}
+          disabled={enviando}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.botonEnviarText}>
+            {enviando ? '⏳ GUARDANDO...' : 'GUARDAR PACIENTE'}
+          </Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -257,6 +323,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 24,
     alignItems: 'center'
+  },
+  botonEnviarDesactivado: { 
+    backgroundColor: '#9ca3af',
+    opacity: 0.7
   },
   botonEnviarText: { color: 'white', fontWeight: 'bold', fontSize: 16 }
 });

@@ -84,3 +84,16 @@ export const limpiarDB = () => {
   db.execSync(`DELETE FROM pacientes_locales`);
   console.log('✓ Base de datos local limpiada');
 };
+// Marca un paciente como FALLIDO_PERMANENTE (datos inválidos, no reintentar)
+export const marcarComoFallidoPermanente = (requestId, mensajeError) => {
+  const timestamp = Date.now();
+  db.runSync(
+    `UPDATE pacientes_locales 
+     SET estado = 'FALLIDO_PERMANENTE', 
+         ultimoError = ?,
+         timestampEnvio = ?
+     WHERE requestId = ?`,
+    [mensajeError, timestamp, requestId]
+  );
+  console.log(`⛔ Paciente ${requestId} marcado como FALLIDO_PERMANENTE: ${mensajeError}`);
+};

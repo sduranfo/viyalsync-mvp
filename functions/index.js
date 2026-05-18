@@ -23,6 +23,65 @@ initializeApp();
 const db = getFirestore();
 
 // ============================================================
+// HELPERS: Reintentos con backoff exponencial
+// ============================================================
+
+const dormir = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Hace un fetch con reintentos automáticos y backoff exponencial.
+ * Distingue entre errores 4xx (no reintentar) y 5xx (reintentar).
+ * 
+ * @param {string} url - URL del servicio a llamar
+ * @param {object} opciones - Opciones del fetch (method, headers, body)
+ * @param {number} maxIntentos - Número máximo de intentos (default: 3)
+ * @returns {Promise<object>} { exito, intento, respuesta?, error?, permanente? }
+ */
+const fetchConReintentos = async (url, opciones, maxIntentos = 3) => {
+  for (let intento = 1; intento <= maxIntentos; intento++) {
+    try {
+      const respuesta = await fetch(url, opciones);
+      
+      // Éxito (2xx)
+      if (respuesta.ok) {
+        return { exito: true, intento, respuesta };
+      }
+      
+      // Error 4xx: petición mal formada, NO tiene sentido reintentar
+      if (respuesta.status >= 400 && respuesta.status < 500) {
+        return { 
+          exito: false, 
+          intento, 
+          error: `HTTP ${respuesta.status}`,
+          permanente: true 
+        };
+      }
+      
+      // Error 5xx: servidor con problemas, vale la pena reintentar
+      throw new Error(`HTTP ${respuesta.status}`);
+      
+    } catch (error) {
+      logger.warn(`Intento ${intento}/${maxIntentos} falló: ${error.message}`);
+      
+      // Si fue el último intento, devolver el error
+      if (intento === maxIntentos) {
+        return { 
+          exito: false, 
+          intento, 
+          error: error.message,
+          permanente: false 
+        };
+      }
+      
+      // Backoff exponencial: 2s, 4s, 8s, 16s...
+      const esperaMs = Math.pow(2, intento) * 1000;
+      logger.info(`Esperando ${esperaMs / 1000}s antes del siguiente intento...`);
+      await dormir(esperaMs);
+    }
+  }
+};
+
+// ============================================================
 // Endpoint: registrarSignosVitales
 // Recibe datos del paramédico, separa PII, evita duplicados
 // ============================================================
@@ -41,16 +100,101 @@ exports.registrarSignosVitales = onRequest(
     try {
       const datos = req.body;
       
-      // VALIDACIÓN BÁSICA
-      if (!datos.requestId || !datos.paciente || !datos.signosVitales) {
-        return res.status(400).json({
-          exito: false,
-          error: "Faltan campos obligatorios: requestId, paciente, signosVitales"
+      // ========== VALIDACIONES MÉDICAS ==========
+
+      // Validar estructura del payload
+      if (!datos || typeof datos !== 'object') {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Payload inválido o vacío' 
         });
       }
 
+      if (!datos.paciente || !datos.signosVitales) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Faltan campos obligatorios: paciente o signosVitales' 
+        });
+      }
+
+      // Validar requestId (UUID)
+      if (!datos.requestId || datos.requestId.length < 10) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'requestId inválido o ausente' 
+        });
+      }
+
+      // Validar Triage
+      const triagesValidos = ['ROJO', 'AMARILLO', 'VERDE'];
+      if (!triagesValidos.includes(datos.signosVitales.triage)) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: `Triage inválido. Debe ser uno de: ${triagesValidos.join(', ')}` 
+        });
+      }
+
+      // Validar Frecuencia Cardíaca (rango fisiológico: 20-250 bpm)
+      const fc = parseInt(datos.signosVitales.frecuenciaCardiaca);
+      if (isNaN(fc) || fc < 20 || fc > 250) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Frecuencia cardíaca fuera de rango (20-250 bpm)' 
+        });
+      }
+
+      // Validar Presión Sistólica (rango: 40-300 mmHg)
+      const sistolica = parseInt(datos.signosVitales.presionSistolica);
+      if (isNaN(sistolica) || sistolica < 40 || sistolica > 300) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Presión sistólica fuera de rango (40-300 mmHg)' 
+        });
+      }
+
+      // Validar Presión Diastólica (rango: 20-200 mmHg)
+      const diastolica = parseInt(datos.signosVitales.presionDiastolica);
+      if (isNaN(diastolica) || diastolica < 20 || diastolica > 200) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Presión diastólica fuera de rango (20-200 mmHg)' 
+        });
+      }
+
+      // Validación lógica: sistólica DEBE ser mayor que diastólica
+      if (sistolica <= diastolica) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Presión sistólica debe ser mayor que diastólica' 
+        });
+      }
+
+      // Validar IDs
+      if (!datos.ambulanciaId || !datos.paramedicoId) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'ambulanciaId y paramedicoId son obligatorios' 
+        });
+      }
+
+      // Validar datos del paciente
+      if (!datos.paciente.nombreCompleto || datos.paciente.nombreCompleto.trim().length < 2) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Nombre del paciente inválido' 
+        });
+      }
+
+      if (!datos.paciente.documentoIdentidad || datos.paciente.documentoIdentidad.trim().length < 5) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Documento de identidad inválido' 
+        });
+      }
+
+      // ========== FIN DE VALIDACIONES ==========
+
       // PASO 1: Verificar idempotencia (driver E11/E12)
-      // Verificar dulicados
       const existente = await db.collection("pacientes")
         .where("requestId", "==", datos.requestId)
         .limit(1)
@@ -84,9 +228,9 @@ exports.registrarSignosVitales = onRequest(
       await db.collection("pacientes").doc(idAnonimo).set({
         idAnonimo: idAnonimo,
         triage: datos.signosVitales.triage,
-        frecuenciaCardiaca: datos.signosVitales.frecuenciaCardiaca,
-        presionSistolica: datos.signosVitales.presionSistolica,
-        presionDiastolica: datos.signosVitales.presionDiastolica,
+        frecuenciaCardiaca: fc,                    // ← usar el parseInt
+        presionSistolica: sistolica,               // ← usar el parseInt
+        presionDiastolica: diastolica,             // ← usar el parseInt
         ambulanciaId: datos.ambulanciaId,
         paramedicoId: datos.paramedicoId,
         estado: "EN_RUTA",
@@ -99,7 +243,7 @@ exports.registrarSignosVitales = onRequest(
       if (datos.signosVitales.triage === "ROJO") {
         await db.collection("alertas_sms").add({
           pacienteId: idAnonimo,
-          cirujanoTelefono: process.env.CIRUJANO_PHONE_NUMBER, // Lee del .env
+          cirujanoTelefono: process.env.CIRUJANO_PHONE_NUMBER,
           mensaje: `ALERTA: Paciente Triage ROJO en camino. Ambulancia ${datos.ambulanciaId}.`,
           enviado: false,
           timestampCreacion: FieldValue.serverTimestamp()
@@ -248,15 +392,15 @@ exports.encolarParaHIS = onRequest(
 // Worker programado: workerEnviarHIS
 // Consumidor: cada 1 segundo, saca máx 2 docs y los envía al HIS
 // ============================================================
+
 exports.workerEnviarHIS = onSchedule(
   {
-    schedule: "every 1 minutes", // En producción será cada minuto, pero procesa varios por minuto
+    schedule: "every 1 minutes",
     region: "us-central1"
   },
   async (event) => {
     logger.info("Worker HIS iniciado");
 
-    // Sacar hasta 2 documentos PENDIENTES
     const pendientes = await db
       .collection("cola_his")
       .where("estado", "==", "PENDIENTE")
@@ -271,169 +415,62 @@ exports.workerEnviarHIS = onSchedule(
 
     logger.info(`Worker HIS: procesando ${pendientes.size} documentos`);
 
-    // Procesar cada documento secuencialmente (NO en paralelo, respetamos el rate limit)
     for (const doc of pendientes.docs) {
       const data = doc.data();
 
-      try {
-        // Llamar al HIS legacy mock
-        const respuesta = await fetch(
-          // Reemplaza con la URL de tu emulador o producción
-          "http://127.0.0.1:5001/vitalsync-mvp/us-central1/hisLegacyMock",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data.payload)
-          }
-        );
+      // Intentar enviar con reintentos automáticos
+      const resultado = await fetchConReintentos(
+        "http://127.0.0.1:5001/vitalsync-mvp/us-central1/hisLegacyMock",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data.payload)
+        },
+        3 // máximo 3 intentos
+      );
 
-        if (respuesta.ok) {
-          // Éxito: marcar como ENVIADO
-          await doc.ref.update({
-            estado: "ENVIADO",
-            timestampEnvio: FieldValue.serverTimestamp()
-          });
-          
-          // Actualizar el paciente principal
-          await db.collection("pacientes").doc(data.pacienteId).update({
-            estado: "ENTREGADO_HIS"
-          });
-
-          logger.info(`Worker HIS: paciente ${data.pacienteId} enviado exitosamente`);
-        } else {
-          // Falló: incrementar intentos
-          const nuevosIntentos = data.intentos + 1;
-          const estadoFinal = nuevosIntentos >= 3 ? "FALLIDO" : "PENDIENTE";
-
-          await doc.ref.update({
-            estado: estadoFinal,
-            intentos: nuevosIntentos,
-            ultimoError: `HTTP ${respuesta.status}`
-          });
-
-          logger.warn(`Worker HIS: fallo en paciente ${data.pacienteId}. Intento ${nuevosIntentos}/3`);
-        }
-
-        // CRÍTICO: esperar 500ms entre peticiones (respeto al rate limit del HIS)
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-      } catch (error) {
-        logger.error(`Worker HIS: error procesando ${data.pacienteId}:`, error.message);
+      if (resultado.exito) {
+        // Éxito: marcar como ENVIADO
         await doc.ref.update({
-          estado: "PENDIENTE", // Reintentar después
-          intentos: (data.intentos || 0) + 1,
-          ultimoError: error.message
+          estado: "ENVIADO",
+          intentos: resultado.intento,
+          timestampEnvio: FieldValue.serverTimestamp()
         });
+        
+        await db.collection("pacientes").doc(data.pacienteId).update({
+          estado: "ENTREGADO_HIS"
+        });
+
+        logger.info(`Worker HIS: paciente ${data.pacienteId} enviado en intento ${resultado.intento}`);
+      } else if (resultado.permanente) {
+        // Error 4xx: no reintentar
+        await doc.ref.update({
+          estado: "FALLIDO_PERMANENTE",
+          intentos: resultado.intento,
+          ultimoError: resultado.error,
+          timestampUltimoIntento: FieldValue.serverTimestamp()
+        });
+        logger.error(`Worker HIS: paciente ${data.pacienteId} rechazado permanentemente: ${resultado.error}`);
+      } else {
+        // Error 5xx: marcar para reintentar más tarde
+        const totalIntentos = (data.intentos || 0) + resultado.intento;
+        const estadoFinal = totalIntentos >= 10 ? "FALLIDO" : "PENDIENTE";
+        
+        await doc.ref.update({
+          estado: estadoFinal,
+          intentos: totalIntentos,
+          ultimoError: resultado.error,
+          timestampUltimoIntento: FieldValue.serverTimestamp()
+        });
+        logger.warn(`Worker HIS: paciente ${data.pacienteId} reintentará. Total intentos: ${totalIntentos}/10`);
       }
+
+      // Respetar rate limit del HIS (2 req/seg max)
+      await dormir(500);
     }
 
     logger.info("Worker HIS finalizado");
   }
-);
-// ============================================================
-// SOLO PARA PRUEBAS LOCALES — copia del worker en versión HTTP
-// Permite disparar el worker manualmente con curl en el emulador
-// NO desplegar a producción
-// ============================================================
-exports.workerEnviarHISManual = onRequest(
-  { cors: true, region: "us-central1" },
-  async (req, res) => {
-    logger.info("Worker HIS Manual iniciado");
-
-    // Sacar hasta 2 documentos PENDIENTES
-    const pendientes = await db
-      .collection("cola_his")
-      .where("estado", "==", "PENDIENTE")
-      .orderBy("timestampCreacion", "asc")
-      .limit(2)
-      .get();
-
-    if (pendientes.empty) {
-      logger.info("Worker HIS Manual: cola vacía");
-      return res.status(200).json({ 
-        exito: true, 
-        mensaje: "Cola vacía, nada que procesar",
-        procesados: 0
-      });
-    }
-
-    logger.info(`Worker HIS Manual: procesando ${pendientes.size} documentos`);
-    const resultados = [];
-
-    // Procesar cada documento secuencialmente
-    for (const doc of pendientes.docs) {
-      const data = doc.data();
-
-      try {
-        const respuesta = await fetch(
-          "http://127.0.0.1:5001/vitalsync-mvp/us-central1/hisLegacyMock",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data.payload)
-          }
-        );
-
-        if (respuesta.ok) {
-          await doc.ref.update({
-            estado: "ENVIADO",
-            timestampEnvio: FieldValue.serverTimestamp()
-          });
-          
-          await db.collection("pacientes").doc(data.pacienteId).update({
-            estado: "ENTREGADO_HIS"
-          });
-
-          resultados.push({ 
-            pacienteId: data.pacienteId, 
-            estado: "ENVIADO" 
-          });
-          logger.info(`Worker HIS Manual: paciente ${data.pacienteId} enviado`);
-          
-        } else {
-          const nuevosIntentos = data.intentos + 1;
-          const estadoFinal = nuevosIntentos >= 3 ? "FALLIDO" : "PENDIENTE";
-
-          await doc.ref.update({
-            estado: estadoFinal,
-            intentos: nuevosIntentos,
-            ultimoError: `HTTP ${respuesta.status}`
-          });
-
-          resultados.push({ 
-            pacienteId: data.pacienteId, 
-            estado: estadoFinal,
-            intento: nuevosIntentos 
-          });
-          logger.warn(`Worker HIS Manual: fallo en ${data.pacienteId}. Intento ${nuevosIntentos}/3`);
-        }
-
-        // CRÍTICO: 500ms entre peticiones (rate limit)
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-      } catch (error) {
-        logger.error(`Worker HIS Manual: error en ${data.pacienteId}:`, error.message);
-        await doc.ref.update({
-          estado: "PENDIENTE",
-          intentos: (data.intentos || 0) + 1,
-          ultimoError: error.message
-        });
-        resultados.push({ 
-          pacienteId: data.pacienteId, 
-          estado: "ERROR",
-          error: error.message 
-        });
-      }
-    }
-
-    return res.status(200).json({
-      exito: true,
-      procesados: resultados.length,
-      resultados: resultados
-    });
-    
-  }
-  
 );
 // ============================================================
 // Trigger: enviarAlertaSMS

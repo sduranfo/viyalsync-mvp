@@ -1,7 +1,8 @@
 import { 
   obtenerPendientes, 
   marcarComoEnviado, 
-  marcarIntentoFallido 
+  marcarIntentoFallido,
+  marcarComoFallidoPermanente  
 } from '../db/database';
 
 // ⚠️ Actualiza esta IP si tu PC cambia de red
@@ -52,16 +53,26 @@ const respuesta = await fetch(BACKEND_URL, {
 clearTimeout(timeoutId); // Si llegó la respuesta a tiempo, cancelamos el abortador
         
         const data = await respuesta.json();
-        
-        if (data.exito) {
-          marcarComoEnviado(pendiente.requestId);
-          exitos++;
-          console.log(`✓ Enviado: ${pendiente.requestId.substring(0, 8)}...`);
-        } else {
-          marcarIntentoFallido(pendiente.requestId, data.error || 'Error desconocido');
-          fallidos++;
-          console.log(`✗ Falló (servidor): ${pendiente.requestId.substring(0, 8)}...`);
-        }
+
+if (data.exito) {
+  marcarComoEnviado(pendiente.requestId);
+  exitos++;
+  console.log(`✓ Enviado: ${pendiente.requestId.substring(0, 8)}...`);
+} else {
+  // ⚠️ Distinguir entre error PERMANENTE (4xx) y TRANSITORIO (5xx)
+  if (respuesta.status >= 400 && respuesta.status < 500) {
+    // Error del cliente: datos inválidos, NO tiene sentido reintentar
+    marcarComoFallidoPermanente(pendiente.requestId, data.error || 'Datos inválidos');
+    fallidos++;
+    console.log(`⛔ Rechazado permanentemente: ${pendiente.requestId.substring(0, 8)}... → ${data.error}`);
+  } else {
+    // Error del servidor: reintentar después
+    marcarIntentoFallido(pendiente.requestId, data.error || 'Error del servidor');
+    fallidos++;
+    console.log(`✗ Falló (servidor): ${pendiente.requestId.substring(0, 8)}... → reintentaré`);
+  }
+}
+
       } catch (error) {
         marcarIntentoFallido(pendiente.requestId, error.message);
         fallidos++;
