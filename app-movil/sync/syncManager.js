@@ -68,7 +68,7 @@ if (data.exito) {
     // Error del servidor: reintentar después
     marcarIntentoFallido(pendiente.requestId, data.error || 'Error del servidor');
     fallidos++;
-    console.log(`✗ Falló (servidor): ${pendiente.requestId.substring(0, 8)}... → reintentaré`);
+console.log(`✗ Falló (servidor): ${pendiente.requestId.substring(0, 8)}... → ${data.error || 'sin mensaje'} (status: ${respuesta.status})`);
   }
 }
 

@@ -139,6 +139,34 @@ exports.registrarSignosVitales = onRequest(
         });
       }
 
+      // Validar edad (rango: 0-120 años)
+      const edad = parseInt(datos.paciente.edad);
+      if (isNaN(edad) || edad < 0 || edad > 120) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: 'Edad fuera de rango (0-120 años)' 
+        });
+      }
+
+      // Validar sexo (M, F, O)
+      const sexosValidos = ['M', 'F', 'O'];
+      if (!sexosValidos.includes(datos.paciente.sexo)) {
+        return res.status(400).json({ 
+          exito: false, 
+          error: `Sexo inválido. Debe ser uno de: ${sexosValidos.join(', ')}` 
+        });
+      }
+
+      // Validar tipo de sangre
+      const tiposSangreValidos = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'DESCONOCIDO'];
+
+      if (!tiposSangreValidos.includes(datos.paciente.tipoSangre)) {
+       return res.status(400).json({ 
+       exito: false, 
+      error: `Tipo de sangre inválido. Debe ser uno de: ${tiposSangreValidos.join(', ')}` 
+        });
+      }
+
       // Validar Frecuencia Cardíaca (rango fisiológico: 20-250 bpm)
       const fc = parseInt(datos.signosVitales.frecuenciaCardiaca);
       if (isNaN(fc) || fc < 20 || fc > 250) {
@@ -232,10 +260,16 @@ exports.registrarSignosVitales = onRequest(
       // PASO 4: Guardar datos médicos (sin PII)
       await db.collection("pacientes").doc(idAnonimo).set({
         idAnonimo: idAnonimo,
+        // Datos médicos anonimizados (NO identifican al paciente por sí solos)
+        edad: edad,
+        sexo: datos.paciente.sexo,
+        tipoSangre: datos.paciente.tipoSangre,
+        // Signos vitales
         triage: datos.signosVitales.triage,
-        frecuenciaCardiaca: fc,                    // ← usar el parseInt
-        presionSistolica: sistolica,               // ← usar el parseInt
-        presionDiastolica: diastolica,             // ← usar el parseInt
+        frecuenciaCardiaca: fc,
+        presionSistolica: sistolica,
+        presionDiastolica: diastolica,
+        // Operacionales
         ambulanciaId: datos.ambulanciaId,
         paramedicoId: datos.paramedicoId,
         estado: "EN_RUTA",

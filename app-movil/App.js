@@ -12,7 +12,15 @@ import {
   StatusBar
 } from 'react-native';
 
-import { inicializarDB, guardarPacienteLocal, contarPendientes } from './db/database';
+import { 
+  inicializarDB, 
+  guardarPacienteLocal, 
+  contarPendientes,
+  obtenerAmbulanciaId,
+  obtenerParamedicoId
+} from './db/database';
+
+
 import { sincronizarPendientes } from './sync/syncManager';
 import { 
   iniciarMonitoreoRed, 
@@ -21,8 +29,6 @@ import {
   detenerSyncPeriodico
 } from './sync/networkWatcher';
 
-const AMBULANCIA_ID = 'AMB-007';
-const PARAMEDICO_ID = 'PARAMEDICO-12';
 
 export default function App() {
   // Estados del formulario
@@ -32,15 +38,25 @@ export default function App() {
   const [frecuenciaCardiaca, setFrecuenciaCardiaca] = useState('');
   const [presionSistolica, setPresionSistolica] = useState('');
   const [presionDiastolica, setPresionDiastolica] = useState('');
+  const [edad, setEdad] = useState('');
+  const [sexo, setSexo] = useState(null);
+  const [tipoSangre, setTipoSangre] = useState(null);
   
   // Estados del sistema
   const [online, setOnline] = useState(true);
   const [pendientes, setPendientes] = useState(0);
   const [enviando, setEnviando] = useState(false);
+  const [ambulanciaId, setAmbulanciaId] = useState('');
+  const [paramedicoId, setParamedicoId] = useState('');
 
   // Inicialización al arrancar la app
   useEffect(() => {
     inicializarDB();
+
+    // Cargar IDs del dispositivo
+    setAmbulanciaId(obtenerAmbulanciaId());
+    setParamedicoId(obtenerParamedicoId());
+
     actualizarContadorPendientes();
     
     iniciarMonitoreoRed((nuevoEstado) => {
@@ -69,53 +85,68 @@ export default function App() {
   // Valida los datos ANTES de guardar local
   // Devuelve null si todo está bien, o un mensaje de error si algo está mal
   const validarDatos = () => {
-    if (!nombreCompleto || nombreCompleto.trim().length < 2) {
-      return 'El nombre del paciente debe tener al menos 2 caracteres';
+  if (!nombreCompleto || nombreCompleto.trim().length < 2) {
+    return 'El nombre del paciente debe tener al menos 2 caracteres';
+  }
+  
+  if (!documento || documento.trim().length < 5) {
+    return 'El documento debe tener al menos 5 caracteres';
+  }
+  
+  if (!edad) {
+    return 'La edad es obligatoria';
+  }
+  
+  const edadNum = parseInt(edad);
+  if (isNaN(edadNum) || edadNum < 0 || edadNum > 150) {
+    return 'Edad fuera de rango (0-150 años)';
+  }
+  
+  if (!sexo) {
+    return 'Debes seleccionar el sexo del paciente';
+  }
+  
+  if (!tipoSangre) {
+    return 'Debes seleccionar el tipo de sangre del paciente';
+  }
+  
+  if (!triage) {
+    return 'Debes seleccionar un nivel de Triage';
+  }
+  
+  if (!frecuenciaCardiaca) {
+    return 'La frecuencia cardíaca es obligatoria';
+  }
+  
+  const fc = parseInt(frecuenciaCardiaca);
+  if (isNaN(fc) || fc < 20 || fc > 250) {
+    return 'Frecuencia cardíaca fuera de rango (20-250 bpm)';
+  }
+  
+  if (presionSistolica) {
+    const sistolica = parseInt(presionSistolica);
+    if (isNaN(sistolica) || sistolica < 40 || sistolica > 300) {
+      return 'Presión sistólica fuera de rango (40-300 mmHg)';
     }
-    
-    if (!documento || documento.trim().length < 5) {
-      return 'El documento debe tener al menos 5 caracteres';
+  }
+  
+  if (presionDiastolica) {
+    const diastolica = parseInt(presionDiastolica);
+    if (isNaN(diastolica) || diastolica < 20 || diastolica > 200) {
+      return 'Presión diastólica fuera de rango (20-200 mmHg)';
     }
-    
-    if (!triage) {
-      return 'Debes seleccionar un nivel de Triage';
+  }
+  
+  if (presionSistolica && presionDiastolica) {
+    const sistolica = parseInt(presionSistolica);
+    const diastolica = parseInt(presionDiastolica);
+    if (sistolica <= diastolica) {
+      return 'La presión sistólica debe ser mayor que la diastólica';
     }
-    
-    if (!frecuenciaCardiaca) {
-      return 'La frecuencia cardíaca es obligatoria';
-    }
-    
-    const fc = parseInt(frecuenciaCardiaca);
-    if (isNaN(fc) || fc < 20 || fc > 250) {
-      return 'Frecuencia cardíaca fuera de rango (20-250 bpm)';
-    }
-    
-    // Las presiones son opcionales en este MVP, pero si están, deben ser válidas
-    if (presionSistolica) {
-      const sistolica = parseInt(presionSistolica);
-      if (isNaN(sistolica) || sistolica < 40 || sistolica > 300) {
-        return 'Presión sistólica fuera de rango (40-300 mmHg)';
-      }
-    }
-    
-    if (presionDiastolica) {
-      const diastolica = parseInt(presionDiastolica);
-      if (isNaN(diastolica) || diastolica < 20 || diastolica > 200) {
-        return 'Presión diastólica fuera de rango (20-200 mmHg)';
-      }
-    }
-    
-    // Si ambas están definidas, validar relación lógica
-    if (presionSistolica && presionDiastolica) {
-      const sistolica = parseInt(presionSistolica);
-      const diastolica = parseInt(presionDiastolica);
-      if (sistolica <= diastolica) {
-        return 'La presión sistólica debe ser mayor que la diastólica';
-      }
-    }
-    
-    return null; // todo OK
-  };
+  }
+  
+  return null;
+};
 
   const enviarPaciente = async () => {
     // PASO 1: Validar ANTES de guardar 
@@ -130,21 +161,24 @@ export default function App() {
 
     try {
       const requestId = uuidv4();
-      const payload = {
-        paciente: {
-          nombreCompleto: nombreCompleto,
-          documentoIdentidad: documento,
-          tipoDocumento: 'CC'
-        },
-        signosVitales: {
-          triage: triage,
-          frecuenciaCardiaca: parseInt(frecuenciaCardiaca),
-          presionSistolica: parseInt(presionSistolica) || 0,
-          presionDiastolica: parseInt(presionDiastolica) || 0
-        },
-        ambulanciaId: AMBULANCIA_ID,
-        paramedicoId: PARAMEDICO_ID
-      };
+        const payload = {
+    paciente: {
+      nombreCompleto: nombreCompleto,
+      documentoIdentidad: documento,
+      tipoDocumento: 'CC',
+      edad: parseInt(edad),
+      sexo: sexo,
+      tipoSangre: tipoSangre
+    },
+    signosVitales: {
+      triage: triage,
+      frecuenciaCardiaca: parseInt(frecuenciaCardiaca),
+      presionSistolica: parseInt(presionSistolica) || 0,
+      presionDiastolica: parseInt(presionDiastolica) || 0
+    },
+    ambulanciaId: ambulanciaId,
+    paramedicoId: paramedicoId
+  };
 
       // PASO 3: Guardar local INMEDIATAMENTE (siempre funciona)
       guardarPacienteLocal(requestId, payload);
@@ -164,6 +198,9 @@ export default function App() {
       setFrecuenciaCardiaca('');
       setPresionSistolica('');
       setPresionDiastolica('');
+      setEdad('');
+      setSexo(null);
+      setTipoSangre(null);
       
       // PASO 6: Disparar sync en background
       sincronizarPendientes().then(() => {
@@ -196,6 +233,11 @@ export default function App() {
       <ScrollView style={styles.scrollContent}>
         <Text style={styles.titulo}>VitalSync 🚑</Text>
         <Text style={styles.subtitulo}>Registro de Paciente</Text>
+        <View style={styles.idBadge}>
+          <Text style={styles.idBadgeText}>
+            🚑 {ambulanciaId || '...'} · 👤 {paramedicoId || '...'}
+          </Text>
+        </View>
 
         <Text style={styles.label}>Nombre completo</Text>
         <TextInput
@@ -213,6 +255,60 @@ export default function App() {
           placeholder="1234567890"
           keyboardType="numeric"
         />
+        <Text style={styles.label}>Edad</Text>
+        <TextInput
+          style={styles.input}
+          value={edad}
+          onChangeText={setEdad}
+          placeholder="35"
+          keyboardType="numeric"
+        />
+
+        <Text style={styles.label}>Sexo</Text>
+        <View style={styles.opcionesGroup}>
+          {[
+            { valor: 'M', label: 'Masculino' },
+            { valor: 'F', label: 'Femenino' },
+            { valor: 'O', label: 'Otro' }
+          ].map((opcion) => (
+            <TouchableOpacity
+              key={opcion.valor}
+              style={[
+                styles.opcionBtn,
+                sexo === opcion.valor && styles.opcionBtnActivo
+              ]}
+              onPress={() => setSexo(opcion.valor)}
+            >
+              <Text style={[
+                styles.opcionBtnText,
+                sexo === opcion.valor && styles.opcionBtnTextActivo
+              ]}>
+                {opcion.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Tipo de sangre</Text>
+        <View style={styles.tipoSangreGrid}>
+          {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'DESCONOCIDO'].map((tipo) => (
+            <TouchableOpacity
+              key={tipo}
+              style={[
+                styles.tipoSangreBtn,
+                tipoSangre === tipo && styles.tipoSangreBtnActivo
+              ]}
+              onPress={() => setTipoSangre(tipo)}
+            >
+              <Text style={[
+                styles.tipoSangreBtnText,
+                tipoSangre === tipo && styles.tipoSangreBtnTextActivo
+              ]}>
+                {tipo === 'DESCONOCIDO' ? '?' : tipo}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <Text style={styles.label}>Nivel de Triage</Text>
         <View style={styles.triageGroup}>
@@ -328,5 +424,71 @@ const styles = StyleSheet.create({
     backgroundColor: '#9ca3af',
     opacity: 0.7
   },
+  opcionesGroup: { 
+  flexDirection: 'row', 
+  gap: 8 
+},
+opcionBtn: {
+  flex: 1,
+  padding: 12,
+  borderRadius: 8,
+  backgroundColor: 'white',
+  borderWidth: 1,
+  borderColor: '#d1d5db',
+  alignItems: 'center'
+},
+opcionBtnActivo: { 
+  borderColor: '#2563eb',
+  backgroundColor: '#2563eb'
+},
+opcionBtnText: { 
+  fontWeight: '600', 
+  color: '#6b7280',
+  fontSize: 13
+},
+opcionBtnTextActivo: { 
+  color: 'white' 
+},
+tipoSangreGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 6
+},
+tipoSangreBtn: {
+  width: '31%',
+  padding: 10,
+  borderRadius: 8,
+  backgroundColor: 'white',
+  borderWidth: 1,
+  borderColor: '#d1d5db',
+  alignItems: 'center'
+},
+tipoSangreBtnActivo: { 
+  borderColor: '#dc2626',
+  backgroundColor: '#dc2626'
+},
+tipoSangreBtnText: { 
+  fontWeight: 'bold', 
+  color: '#374151',
+  fontSize: 14
+},
+tipoSangreBtnTextActivo: { 
+  color: 'white' 
+},
+idBadge: {
+  backgroundColor: '#e0e7ff',
+  padding: 10,
+  borderRadius: 8,
+  marginTop: 8,
+  marginBottom: 8,
+  borderLeftWidth: 4,
+  borderLeftColor: '#4f46e5'
+},
+idBadgeText: {
+  fontSize: 13,
+  fontWeight: '600',
+  color: '#4338ca',
+  fontFamily: 'monospace'
+},
   botonEnviarText: { color: 'white', fontWeight: 'bold', fontSize: 16 }
 });
